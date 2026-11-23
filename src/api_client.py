@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from calendar import monthrange
 from datetime import date, datetime
 from math import asin, cos, isfinite, radians, sin, sqrt
 import re
@@ -116,8 +117,23 @@ def _validate_date_time(value, field, *, nullable=False, max_filter_type=4):
         raise ValueError(f"{field}.start_time is required for filter_type 1.")
     if filter_type == 2 and (not value.get("start_time") or not value.get("end_time")):
         raise ValueError(f"{field}.start_time and end_time are required for filter_type 2.")
-    if filter_type == 4 and not value.get("end_date"):
-        raise ValueError(f"{field}.end_date is required for filter_type 4.")
+    if filter_type == 4:
+        if not value.get("end_date"):
+            raise ValueError(f"{field}.end_date is required for filter_type 4.")
+        start_date = date.fromisoformat(value["start_date"])
+        end_date = date.fromisoformat(value["end_date"])
+        if end_date < start_date:
+            raise ValueError(f"{field}.end_date must not be before start_date.")
+        if start_date.month == 12:
+            maximum_year = start_date.year + 1
+            maximum_month = 1
+        else:
+            maximum_year = start_date.year
+            maximum_month = start_date.month + 1
+        maximum_day = min(start_date.day, monthrange(maximum_year, maximum_month)[1])
+        maximum_end_date = date(maximum_year, maximum_month, maximum_day)
+        if end_date > maximum_end_date:
+            raise ValueError(f"{field} date range must not exceed one calendar month.")
 
 
 def _validate_coordinate(value, minimum, maximum, message):
@@ -201,7 +217,7 @@ def _validate_heatmap(payload):
 
 def _validate_satellite(payload):
     _require_object(payload, "Request body must be an object.")
-    _require_fields(payload, ("date_time",), "Satellite request is missing required fields.")
+    _require_fields(payload, ("date_time", "sat"), "Satellite request is missing required fields.")
     _validate_date_time(payload["date_time"], "date_time", max_filter_type=3)
     _validate_optional_type(payload, "big_area", lambda value: _require_boolean(value, "big_area must be boolean."))
     if "granularity" in payload:
@@ -209,9 +225,8 @@ def _validate_satellite(payload):
         if isinstance(granularity, bool) or not isinstance(granularity, int) or granularity not in {20, 60, 80, 100}:
             raise ValueError("satellite granularity must be 20, 60, 80, or 100.")
     _validate_optional_type(payload, "heatmap_id", lambda value: _require_string(value, "heatmap_id must be a string."), nullable=True)
-    if "sat" in payload and payload["sat"] is not None:
-        _require_object(payload["sat"], "sat must be an object or null.")
-        _validate_latitude_longitude(payload["sat"])
+    _require_object(payload["sat"], "sat must be an object.")
+    _validate_latitude_longitude(payload["sat"], bounded=False)
 
 
 def _validate_streetview(payload):
@@ -276,10 +291,8 @@ def _validate_routing(payload):
         point = payload[field]
         _require_object(point, f"{field} must be an object.")
         _validate_latitude_longitude(point, names=("lat", "lon"))
-    origin = payload["origin"]
     destination = payload["destination"]
-    if origin["lat"] == destination["lat"] and origin["lon"] == destination["lon"]:
-        raise ValueError("origin and destination must differ.")
+    origin = payload["origin"]
     latitude_delta = radians(destination["lat"] - origin["lat"])
     longitude_delta = radians(destination["lon"] - origin["lon"])
     origin_latitude = radians(origin["lat"])

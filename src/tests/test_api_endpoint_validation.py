@@ -23,7 +23,10 @@ def valid_payloads():
             "polygon_aoi": deepcopy(POLYGON),
             "granularity": 20,
         },
-        "/v1/satellite": {"date_time": deepcopy(DATE_TIME)},
+        "/v1/satellite": {
+            "date_time": deepcopy(DATE_TIME),
+            "sat": {"latitude": 40, "longitude": -70},
+        },
         "/v1/streetview": {
             "back_view": False,
             "horizontal_angle": 360,
@@ -162,6 +165,76 @@ def test_filter_type_four_is_supported_only_for_heatmap(path):
         transport.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("start_date", "end_date"),
+    [
+        ("2021-01-31", "2021-02-28"),
+        ("2020-01-31", "2020-02-29"),
+        ("2021-03-31", "2021-04-30"),
+        ("2021-12-31", "2022-01-31"),
+    ],
+)
+def test_heatmap_filter_type_four_accepts_calendar_month_boundaries(start_date, end_date):
+    payload = valid_payloads()["/v1/heatmap"]
+    payload["date_time"] = {
+        "filter_type": 4,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+    transport = Mock(return_value=SimpleNamespace(status_code=200))
+
+    make_client(transport).post("/v1/heatmap", json=payload)
+
+    assert transport.call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("start_date", "end_date"),
+    [
+        ("2021-01-31", "2021-03-01"),
+        ("2021-03-31", "2021-05-01"),
+        ("2021-12-31", "2022-02-01"),
+        ("2021-02-20", "2021-02-19"),
+    ],
+)
+def test_heatmap_filter_type_four_rejects_invalid_ranges(start_date, end_date):
+    payload = valid_payloads()["/v1/heatmap"]
+    payload["date_time"] = {
+        "filter_type": 4,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+    transport = Mock()
+
+    with pytest.raises(ValueError):
+        make_client(transport).post("/v1/heatmap", json=payload)
+
+    transport.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("start_date", "2021-02-29"),
+        ("end_date", None),
+    ],
+)
+def test_heatmap_filter_type_four_rejects_invalid_or_missing_dates(field, value):
+    payload = valid_payloads()["/v1/heatmap"]
+    payload["date_time"] = {
+        "filter_type": 4,
+        "start_date": "2021-01-31",
+        "end_date": "2021-02-28",
+    }
+    payload["date_time"][field] = value
+    transport = Mock()
+
+    with pytest.raises(ValueError):
+        make_client(transport).post("/v1/heatmap", json=payload)
+
+    transport.assert_not_called()
+
+
 @pytest.mark.parametrize("path", ["/v1/heatmap", "/v1/satellite", "/v1/env_params"])
 def test_future_dates_are_not_rejected_without_a_documented_restriction(path):
     payload = valid_payloads()[path]
@@ -209,6 +282,62 @@ def test_heatmap_accepts_documented_granularity_values(granularity):
 def test_satellite_accepts_documented_granularity_values(granularity):
     payload = valid_payloads()["/v1/satellite"]
     payload["granularity"] = granularity
+    transport = Mock(return_value=SimpleNamespace(status_code=200))
+
+    make_client(transport).post("/v1/satellite", json=payload)
+
+    assert transport.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "sat",
+    [
+        None,
+        [],
+        {},
+        {"latitude": 40},
+        {"longitude": -70},
+        {"latitude": True, "longitude": -70},
+        {"latitude": 40, "longitude": False},
+        {"latitude": "40", "longitude": -70},
+        {"latitude": 40, "longitude": " -70"},
+        {"latitude": float("nan"), "longitude": -70},
+        {"latitude": 40, "longitude": float("inf")},
+    ],
+)
+def test_satellite_requires_object_with_finite_numeric_coordinates(sat):
+    payload = valid_payloads()["/v1/satellite"]
+    payload["sat"] = sat
+    transport = Mock()
+
+    with pytest.raises(ValueError):
+        make_client(transport).post("/v1/satellite", json=payload)
+
+    transport.assert_not_called()
+
+
+def test_satellite_rejects_missing_sat():
+    payload = valid_payloads()["/v1/satellite"]
+    payload.pop("sat")
+    transport = Mock()
+
+    with pytest.raises(ValueError, match="missing required fields"):
+        make_client(transport).post("/v1/satellite", json=payload)
+
+    transport.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "sat",
+    [
+        {"latitude": -90, "longitude": -180},
+        {"latitude": 90, "longitude": 180},
+        {"latitude": 40.5, "longitude": -70.25},
+    ],
+)
+def test_satellite_accepts_finite_coordinates_without_geographic_restrictions(sat):
+    payload = valid_payloads()["/v1/satellite"]
+    payload["sat"] = sat
     transport = Mock(return_value=SimpleNamespace(status_code=200))
 
     make_client(transport).post("/v1/satellite", json=payload)
@@ -407,15 +536,14 @@ def test_routing_rejects_out_of_range_coordinates_before_transport(field, value)
     transport.assert_not_called()
 
 
-def test_routing_rejects_identical_endpoints_before_transport():
+def test_routing_accepts_identical_endpoints():
     payload = valid_payloads()["/v1/routing"]
     payload["destination"] = dict(payload["origin"])
-    transport = Mock()
+    transport = Mock(return_value=SimpleNamespace(status_code=200))
 
-    with pytest.raises(ValueError, match="must differ"):
-        make_client(transport).post("/v1/routing", json=payload)
+    make_client(transport).post("/v1/routing", json=payload)
 
-    transport.assert_not_called()
+    assert transport.call_count == 1
 
 
 def test_routing_rejects_distance_over_200_km_before_transport():
