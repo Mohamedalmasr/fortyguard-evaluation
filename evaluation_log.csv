@@ -1,0 +1,13 @@
+﻿record_type,operation,result,trace_id,latency_ms,credit_cost,details
+executed_test,credit_balance,passed,05e662bcf543,622,0,
+executed_test,monitoring/list_monitors,passed,09a4ed843951,497,0,
+executed_test,monitoring/list_alerts,failed invalid_input,c72977ebfe0a,,,Reproducible invalid_input response
+executed_test,monitoring/list_alerts retry,failed invalid_input,915167d76178,,,Retry also returned invalid_input
+executed_test,credit_balance verification,passed,72d16e025775,562,0,"Balance remained 1,000,000"
+schema_inspection,heatmap_read,inspected,,,,Read-tool credit cost unspecified
+schema_inspection,report_read,inspected,,,,Read-tool credit cost unspecified
+schema_inspection,temperature_routing_read,inspected,,,,Read-tool credit cost unspecified
+schema_inspection,env_params,inspected,,,,Schema and description inspected; not an executed test
+schema_inspection,monitoring,inspected,,,,Schema and description inspected; not an executed test; read-tool credit cost unspecified
+catalog_finding,health-check/test/demo operation,not exposed,,,,No dedicated health-check or test/demo operation appeared in exposed catalog
+finding,monitoring/list_alerts,repeatable invalid_input,,,,Two attempts failed with invalid_input; root cause not established
