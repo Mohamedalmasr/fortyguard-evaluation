@@ -31,6 +31,17 @@ The two `list_alerts` failures make the invalid-input behavior reproducible acro
 - Read-tool credit costs are unspecified in the inspected descriptions. No zero-cost claim is made for these tools.
 - No dedicated health-check or test/demo operation was present in the exposed catalog.
 
+## Local REST API Validation
+
+A separate Python-based REST API validation client was developed using the documented endpoint contracts.
+
+- Implemented offline request validation before transport.
+- Added automated tests for endpoint parameters, data types, and validation rules.
+- Fixed several identified validation gaps.
+- Final test result: **258 tests passed**.
+
+These were local automated tests using the documented API contracts and did not involve live REST API requests.
+
 ## Limitations
 
 - The log contains no timestamps or request inputs because none were supplied.
